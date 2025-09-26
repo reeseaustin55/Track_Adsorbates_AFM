@@ -6,6 +6,11 @@ Python implementation of the AFM adsorbate tracking and diffusion analysis pipel
 - `analyze_adsorbate_diffusion`: runs lattice locking and drift-corrected diffusion analysis, mirroring the MATLAB workflow.
 - `launch_gui`: a Tkinter GUI for selecting input data and configurable parameters.
 
+## Requirements
+
+- Python 3.12 (tested with Python 3.12.10)
+- Third-party packages: `numpy`, `scipy`, `imageio` (install `imageio-ffmpeg` for MP4 export support)
+
 ## Usage
 
 ```bash
