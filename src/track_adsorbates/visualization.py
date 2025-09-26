@@ -20,10 +20,19 @@ def draw_lattice_overlay(
 
     height, width = frame_shape
     base = np.zeros((height, width, 3), dtype=np.uint8)
-    radius = max(int(round(atom_diameter_pixels / 2.0)), 1)
+    radius = max(int(np.ceil(atom_diameter_pixels / 2.0)), 2)
+    outline_radius = radius + 1
     for point, present in zip(detection.points, detection.present):
-        color = (160, 160, 160) if not present else (0, 255, 255)
-        cv2.circle(base, (int(round(point[0])), int(round(point[1]))), radius, color, -1)
+        center = (int(round(point[0])), int(round(point[1])))
+        if present:
+            fill_color = (255, 255, 0)
+            edge_color = (0, 0, 0)
+        else:
+            fill_color = (220, 220, 220)
+            edge_color = (60, 60, 60)
+
+        cv2.circle(base, center, outline_radius, edge_color, thickness=-1, lineType=cv2.LINE_AA)
+        cv2.circle(base, center, radius, fill_color, thickness=-1, lineType=cv2.LINE_AA)
     return base
 
 
