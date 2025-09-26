@@ -18,7 +18,7 @@ class App(tk.Tk):
         self.video_path_var = tk.StringVar()
         self.approx_a_var = tk.DoubleVar(value=3.0)
         self.approx_b_var = tk.DoubleVar(value=3.0)
-        self.angle_var = tk.DoubleVar(value=60.0)
+        self.angle_var = tk.DoubleVar(value=90.0)
         self.frame_width_var = tk.DoubleVar(value=10.0)
         self.wiggle_var = tk.DoubleVar(value=10.0)
         self.atom_diameter_var = tk.DoubleVar(value=1.5)

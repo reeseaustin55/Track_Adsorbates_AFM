@@ -38,7 +38,7 @@ To process a video from the terminal instead, supply the required lattice parame
 python run_pipeline.py /path/to/video.mp4 \
     --approx-a 3.0 \
     --approx-b 3.0 \
-    --angle 60 \
+    --angle 90 \
     --frame-width 10 \
     --wiggle 10 \
     --atom-diameter 1.5 \

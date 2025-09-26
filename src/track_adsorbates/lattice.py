@@ -62,13 +62,6 @@ def _frequency_vectors(peaks: NDArray[np.int_], shape: Tuple[int, int]) -> NDArr
     return freq.astype(np.float32)
 
 
-def _direct_length(freq_vec: NDArray[np.float32]) -> float:
-    magnitude = np.linalg.norm(freq_vec)
-    if magnitude == 0:
-        return np.inf
-    return 1.0 / magnitude
-
-
 def estimate_lattice_from_frame(
     frame: NDArray[np.float32],
     approx_params: LatticeParameters,
@@ -94,12 +87,22 @@ def estimate_lattice_from_frame(
         for j in range(i + 1, len(freq_vectors)):
             g1 = freq_vectors[i]
             g2 = freq_vectors[j]
-            length1 = _direct_length(g1)
-            length2 = _direct_length(g2)
-            for g_a, len_a, g_b, len_b in [
-                (g1, length1, g2, length2),
-                (g2, length2, g1, length1),
+            for g_a, g_b in [
+                (g1, g2),
+                (g2, g1),
             ]:
+                det = g_a[0] * g_b[1] - g_a[1] * g_b[0]
+                if abs(det) < 1e-8:
+                    continue
+
+                reciprocal = np.stack([g_a, g_b]).astype(np.float64)
+                direct_basis = np.linalg.inv(reciprocal)
+                direct_a = direct_basis[:, 0]
+                direct_b = direct_basis[:, 1]
+
+                len_a = np.linalg.norm(direct_a)
+                len_b = np.linalg.norm(direct_b)
+
                 if not (
                     expected_a * (1 - tolerance)
                     <= len_a
@@ -113,15 +116,13 @@ def estimate_lattice_from_frame(
                 ):
                     continue
 
-                angle = np.arccos(
-                    np.clip(
-                        np.dot(g_a, g_b)
-                        / (np.linalg.norm(g_a) * np.linalg.norm(g_b)),
-                        -1.0,
-                        1.0,
-                    )
+                cos_angle = np.clip(
+                    np.dot(direct_a, direct_b) / (len_a * len_b + 1e-12),
+                    -1.0,
+                    1.0,
                 )
-                direct_angle = np.pi - angle
+                direct_angle = np.arccos(cos_angle)
+
                 score = (
                     abs(len_a - expected_a)
                     + abs(len_b - expected_b)
@@ -129,10 +130,10 @@ def estimate_lattice_from_frame(
                 )
                 if score < best_score:
                     best_score = score
-                    orientation = np.degrees(np.arctan2(g_a[1], g_a[0])) % 360.0
+                    orientation = np.degrees(np.arctan2(direct_a[1], direct_a[0])) % 360.0
                     best_params = LatticeParameters(
-                        a_length=len_a * pixel_size_nm / 0.1,
-                        b_length=len_b * pixel_size_nm / 0.1,
+                        a_length=len_a * pixel_size_nm * 10.0,
+                        b_length=len_b * pixel_size_nm * 10.0,
                         angle_deg=np.degrees(direct_angle),
                         orientation_deg=orientation,
                     )
