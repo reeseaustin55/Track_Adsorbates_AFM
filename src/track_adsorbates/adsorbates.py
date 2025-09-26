@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
@@ -11,11 +11,20 @@ from scipy.optimize import linear_sum_assignment
 
 @dataclass
 class AdsorbateDetection:
+    """Stores lattice positions and occupancy for a single frame."""
+
     points: NDArray[np.float32]
     present: NDArray[np.bool_]
+    indices: NDArray[np.int32]
+    phases: NDArray[np.float32]
 
     def to_dict(self) -> Dict[str, NDArray]:
-        return {"points": self.points, "present": self.present}
+        return {
+            "points": self.points,
+            "present": self.present,
+            "indices": self.indices,
+            "phases": self.phases,
+        }
 
 
 @dataclass
@@ -39,6 +48,8 @@ class Track:
 
 @dataclass
 class DiffusionResults:
+    """Container for diffusion statistics."""
+
     frame_values: NDArray[np.float64]
     average: float
     slope: float
@@ -47,20 +58,53 @@ class DiffusionResults:
 def detect_adsorbates(
     frame: NDArray[np.float32],
     lattice_points: NDArray[np.float32],
+    lattice_indices: NDArray[np.int32],
+    phases: Sequence[float],
     atom_diameter_pixels: float,
-    brightness_threshold: float = 0.5,
 ) -> AdsorbateDetection:
-    """Detect adsorbates by sampling intensity around lattice points."""
+    """Detect adsorbates by sampling intensities under lattice nodes.
+
+    The samples are normalised per-frame so the classification adapts to
+    contrast variations.  A two-tier decision is used: if the spread in
+    sampled values is significant we threshold near the 70th percentile;
+    otherwise we rescue the few brightest sites so that sparse occupancies
+    are still captured.
+    """
 
     height, width = frame.shape
-    radius = max(atom_diameter_pixels / 2.0, 1.0)
+    radius = max(float(atom_diameter_pixels) / 2.0, 1.0)
     y_coords = np.clip(lattice_points[:, 1], 0, height - 1)
     x_coords = np.clip(lattice_points[:, 0], 0, width - 1)
 
     samples = nd_gaussian_sample(frame, x_coords, y_coords, radius)
-    norm_samples = (samples - samples.min()) / (samples.max() - samples.min() + 1e-6)
-    present = norm_samples > brightness_threshold
-    return AdsorbateDetection(points=lattice_points, present=present)
+    if samples.size == 0:
+        present = np.zeros(0, dtype=bool)
+    else:
+        samples = samples.astype(np.float32)
+        sample_min = float(np.min(samples))
+        sample_max = float(np.max(samples))
+        span = sample_max - sample_min
+        if span < 1e-6:
+            present = np.zeros_like(samples, dtype=bool)
+        else:
+            norm = (samples - sample_min) / span
+            high = np.percentile(norm, 70.0)
+            if high < 0.35:
+                high = 0.35
+            present = norm >= high
+            # ensure we keep at least a few of the brightest spots
+            if np.count_nonzero(present) < max(3, int(0.03 * len(norm))):
+                order = np.argsort(norm)[::-1]
+                keep = order[: max(3, min(len(norm), int(np.ceil(0.05 * len(norm)))))]
+                present = np.zeros_like(norm, dtype=bool)
+                present[keep] = True
+
+    return AdsorbateDetection(
+        points=lattice_points.astype(np.float32, copy=False),
+        present=present.astype(bool, copy=False),
+        indices=lattice_indices.astype(np.int32, copy=False),
+        phases=np.asarray(phases, dtype=np.float32),
+    )
 
 
 def nd_gaussian_sample(

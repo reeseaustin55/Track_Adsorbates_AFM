@@ -42,8 +42,7 @@ python run_pipeline.py /path/to/video.mp4 \
     --frame-width 10 \
     --wiggle 10 \
     --atom-diameter 1.5 \
-    --drift 2.0 \
-    --threshold 0.5
+    --drift 2.0
 ```
 
 The command produces artefacts alongside the source video:

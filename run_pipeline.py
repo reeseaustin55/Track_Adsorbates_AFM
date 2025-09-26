@@ -19,7 +19,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wiggle", type=float, default=10.0, help="Wiggle room around lattice parameters (%)")
     parser.add_argument("--atom-diameter", type=float, default=1.5, help="Atom diameter for overlay (Å)")
     parser.add_argument("--drift", type=float, default=2.0, help="Drift allowance between frames (atoms)")
-    parser.add_argument("--threshold", type=float, default=0.5, help="Brightness threshold for adsorbates")
     return parser.parse_args()
 
 
@@ -40,7 +39,6 @@ def main() -> None:
         wiggle_percent=args.wiggle,
         atom_diameter_angstrom=args.atom_diameter,
         drift_allowance_atoms=args.drift,
-        brightness_threshold=args.threshold,
     )
     result = run_pipeline(video, config)
     print(f"True lattice: {result.lattice_json}")

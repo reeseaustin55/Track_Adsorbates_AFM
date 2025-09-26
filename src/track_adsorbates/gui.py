@@ -23,7 +23,6 @@ class App(tk.Tk):
         self.wiggle_var = tk.DoubleVar(value=10.0)
         self.atom_diameter_var = tk.DoubleVar(value=1.5)
         self.drift_allowance_var = tk.DoubleVar(value=2.0)
-        self.threshold_var = tk.DoubleVar(value=0.5)
 
         self._build_ui()
 
@@ -44,7 +43,6 @@ class App(tk.Tk):
             ("Wiggle (%)", self.wiggle_var),
             ("Atom diameter (Å)", self.atom_diameter_var),
             ("Drift allowance (atoms)", self.drift_allowance_var),
-            ("Brightness threshold", self.threshold_var),
         ]:
             tk.Label(self, text=label).grid(row=row, column=0, **padding)
             tk.Entry(self, textvariable=var).grid(row=row, column=1, columnspan=2, **padding)
@@ -75,7 +73,6 @@ class App(tk.Tk):
             wiggle_percent=float(self.wiggle_var.get()),
             atom_diameter_angstrom=float(self.atom_diameter_var.get()),
             drift_allowance_atoms=float(self.drift_allowance_var.get()),
-            brightness_threshold=float(self.threshold_var.get()),
         )
 
         threading.Thread(
