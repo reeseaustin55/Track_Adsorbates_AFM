@@ -379,8 +379,8 @@ def simple_lattice_occupancy(
         combo = np.clip(combo, 0, 1)
         combo_rgb = np.repeat((combo * 255).astype(np.uint8)[..., None], 3, axis=2)
 
-        side_writer.write(combo_rgb)
-        only_writer.write(art_rgb)
+        side_writer.append_data(combo_rgb)
+        only_writer.append_data(art_rgb)
 
         bundle = FrameBundle(
             nodes_px_locked=xy_lock_in,
