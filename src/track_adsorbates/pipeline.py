@@ -41,15 +41,18 @@ class PipelineResult:
     overlay_video_path: Path
     diffusion_json: Path
     diffusion_csv: Path
+    lattice_json: Path
 
 
-def run_pipeline(video: VideoData, config: PipelineConfig, output_dir: Path) -> PipelineResult:
+def run_pipeline(video: VideoData, config: PipelineConfig) -> PipelineResult:
+    output_dir = video.path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
     approx_lattice = LatticeParameters(
         a_length=config.approx_a_angstrom,
         b_length=config.approx_b_angstrom,
         angle_deg=config.approx_angle_deg,
+        orientation_deg=0.0,
     )
 
     width_pixels = video.frame_shape[1]
@@ -57,25 +60,37 @@ def run_pipeline(video: VideoData, config: PipelineConfig, output_dir: Path) -> 
 
     per_frame_lattices: List[LatticeParameters] = []
 
-    for frame in video.frames:
+    for frame in video.frames_gray:
         params = estimate_lattice_from_frame(frame, approx_lattice, pixel_size_nm)
         if params is None:
             params = approx_lattice
         per_frame_lattices.append(params)
 
     true_lattice = consolidate_lattice(per_frame_lattices)
-    export_lattice(output_dir / "true_lattice.json", true_lattice)
+    lattice_path = output_dir / f"{video.path.stem}_true_lattice.json"
+    export_lattice(lattice_path, true_lattice)
 
     wiggle = config.wiggle_percent / 100.0
     detections: List[AdsorbateDetection] = []
 
+    refined_lattices: List[LatticeParameters] = []
+    for frame in video.frames_gray:
+        refined = estimate_lattice_from_frame(
+            frame,
+            true_lattice,
+            pixel_size_nm,
+            tolerance=max(wiggle, 0.05),
+        )
+        if refined is None:
+            refined = true_lattice
+        refined_lattices.append(refined)
+
     a_vec, b_vec = lattice_vectors_in_pixels(true_lattice, pixel_size_nm)
     atom_diameter_pixels = config.atom_diameter_angstrom * 0.1 / pixel_size_nm
 
-    for frame in video.frames:
-        a_scaled = a_vec * (1.0 + wiggle)
-        b_scaled = b_vec * (1.0 + wiggle)
-        translation = refine_translation(frame, a_scaled, b_scaled)
+    for frame, refined in zip(video.frames_gray, refined_lattices):
+        a_refined, b_refined = lattice_vectors_in_pixels(refined, pixel_size_nm)
+        translation = refine_translation(frame, a_refined, b_refined)
         points = build_lattice_points(frame.shape, a_vec, b_vec, translation)
         detection = detect_adsorbates(
             frame,
@@ -86,21 +101,25 @@ def run_pipeline(video: VideoData, config: PipelineConfig, output_dir: Path) -> 
         detections.append(detection)
 
     # Align frames using translation drift correction
-    aligned_detections = _align_detections(detections, config.drift_allowance_atoms, a_vec, b_vec)
+    aligned_detections = _align_detections(
+        detections, config.drift_allowance_atoms, a_vec, b_vec
+    )
 
     tracks = assign_tracks(aligned_detections, max_distance=config.drift_allowance_atoms * np.linalg.norm(a_vec))
     diffusion = compute_diffusion(tracks, pixel_size_nm=pixel_size_nm, fps=video.fps)
 
     overlay_frames = []
-    for frame, detection in zip(video.frames, aligned_detections):
-        overlay = draw_lattice_overlay(frame, detection, atom_diameter_pixels)
-        overlay_frames.append(combine_frames(frame, overlay))
+    for color_frame, detection in zip(video.frames_color, aligned_detections):
+        overlay = draw_lattice_overlay(color_frame.shape[:2], detection, atom_diameter_pixels)
+        overlay_frames.append(
+            combine_frames(color_frame, overlay)
+        )
 
     overlay_path = output_dir / f"{video.path.stem}_overlay.mp4"
     write_video(overlay_path, overlay_frames, fps=video.fps)
 
-    diffusion_json = output_dir / "diffusion_summary.json"
-    diffusion_csv = output_dir / "diffusion_frame_values.csv"
+    diffusion_json = output_dir / f"{video.path.stem}_diffusion_summary.json"
+    diffusion_csv = output_dir / f"{video.path.stem}_diffusion_frame_values.csv"
     export_diffusion(diffusion_json, diffusion, fps=video.fps)
     export_frame_diffusion(diffusion_csv, diffusion.frame_values)
 
@@ -111,6 +130,7 @@ def run_pipeline(video: VideoData, config: PipelineConfig, output_dir: Path) -> 
         overlay_video_path=overlay_path,
         diffusion_json=diffusion_json,
         diffusion_csv=diffusion_csv,
+        lattice_json=lattice_path,
     )
 
 

@@ -10,6 +10,8 @@ This project provides a GUI and command line interface for analysing atomic-reso
 6. Diffusion coefficient computation from the resulting trajectories.
 7. Export of diffusion statistics alongside a side-by-side overlay video.
 
+> **Angle convention:** the `--angle` parameter (and its GUI counterpart) represents the angle *between* the two lattice vectors. The in-frame orientation of the lattice is determined automatically from the footage.
+
 ## Installation
 
 ```bash
@@ -24,7 +26,7 @@ pip install -r requirements.txt
 python -m src.track_adsorbates.gui
 ```
 
-Select an input video and adjust parameters to suit your dataset. Outputs are saved to the chosen directory.
+Select an input video and adjust parameters to suit your dataset. The GUI automatically saves all artefacts in the same directory as the source video, so no output folder selection is required.
 
 ## Command Line Usage
 
@@ -41,13 +43,12 @@ python run_pipeline.py /path/to/video.mp4 \
     --wiggle 10 \
     --atom-diameter 1.5 \
     --drift 2.0 \
-    --threshold 0.5 \
-    --output results
+    --threshold 0.5
 ```
 
-The command produces:
+The command produces artefacts alongside the source video:
 
-- `results/true_lattice.json` – consolidated lattice parameters.
-- `results/diffusion_summary.json` – overall diffusion statistics.
-- `results/diffusion_frame_values.csv` – per-frame diffusion coefficients.
-- `results/<video_name>_overlay.mp4` – video showing the original data with the artificial lattice overlay.
+- `<video_name>_true_lattice.json` – consolidated lattice parameters (including the in-frame orientation).
+- `<video_name>_diffusion_summary.json` – overall diffusion statistics.
+- `<video_name>_diffusion_frame_values.csv` – per-frame diffusion coefficients.
+- `<video_name>_overlay.mp4` – side-by-side video with the colour original on the left and the standalone artificial lattice on the right.

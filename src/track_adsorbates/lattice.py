@@ -17,12 +17,14 @@ class LatticeParameters:
     a_length: float
     b_length: float
     angle_deg: float
+    orientation_deg: float = 0.0
 
     def as_dict(self) -> Dict[str, float]:
         return {
             "a_length": float(self.a_length),
             "b_length": float(self.b_length),
             "angle_deg": float(self.angle_deg),
+            "orientation_deg": float(self.orientation_deg % 360.0),
         }
 
     def wiggle(self, percent: float) -> "LatticeParameters":
@@ -31,6 +33,7 @@ class LatticeParameters:
             a_length=self.a_length * scale,
             b_length=self.b_length * scale,
             angle_deg=self.angle_deg,
+            orientation_deg=self.orientation_deg,
         )
 
 
@@ -93,40 +96,58 @@ def estimate_lattice_from_frame(
             g2 = freq_vectors[j]
             length1 = _direct_length(g1)
             length2 = _direct_length(g2)
-            if not (expected_a * (1 - tolerance) <= length1 <= expected_a * (1 + tolerance)):
-                continue
-            if not (expected_b * (1 - tolerance) <= length2 <= expected_b * (1 + tolerance)):
-                continue
-            angle = np.arccos(
-                np.clip(
-                    np.dot(g1, g2)
-                    / (np.linalg.norm(g1) * np.linalg.norm(g2)),
-                    -1.0,
-                    1.0,
+            for g_a, len_a, g_b, len_b in [
+                (g1, length1, g2, length2),
+                (g2, length2, g1, length1),
+            ]:
+                if not (
+                    expected_a * (1 - tolerance)
+                    <= len_a
+                    <= expected_a * (1 + tolerance)
+                ):
+                    continue
+                if not (
+                    expected_b * (1 - tolerance)
+                    <= len_b
+                    <= expected_b * (1 + tolerance)
+                ):
+                    continue
+
+                angle = np.arccos(
+                    np.clip(
+                        np.dot(g_a, g_b)
+                        / (np.linalg.norm(g_a) * np.linalg.norm(g_b)),
+                        -1.0,
+                        1.0,
+                    )
                 )
-            )
-            direct_angle = np.pi - angle
-            score = (
-                abs(length1 - expected_a)
-                + abs(length2 - expected_b)
-                + abs(direct_angle - expected_angle)
-            )
-            if score < best_score:
-                best_score = score
-                best_params = LatticeParameters(
-                    a_length=length1 * pixel_size_nm / 0.1,
-                    b_length=length2 * pixel_size_nm / 0.1,
-                    angle_deg=np.degrees(direct_angle),
+                direct_angle = np.pi - angle
+                score = (
+                    abs(len_a - expected_a)
+                    + abs(len_b - expected_b)
+                    + abs(direct_angle - expected_angle)
                 )
+                if score < best_score:
+                    best_score = score
+                    orientation = np.degrees(np.arctan2(g_a[1], g_a[0])) % 360.0
+                    best_params = LatticeParameters(
+                        a_length=len_a * pixel_size_nm / 0.1,
+                        b_length=len_b * pixel_size_nm / 0.1,
+                        angle_deg=np.degrees(direct_angle),
+                        orientation_deg=orientation,
+                    )
 
     return best_params
 
 
-def consolidate_lattice(parameters: Iterable[LatticeParameters], threshold: float = 2.5) -> LatticeParameters:
+def consolidate_lattice(
+    parameters: Iterable[LatticeParameters], threshold: float = 2.5
+) -> LatticeParameters:
     """Consolidate per-frame lattice estimates into a robust set of parameters."""
     a_values = np.array([p.a_length for p in parameters])
     b_values = np.array([p.b_length for p in parameters])
     angles = np.array([p.angle_deg for p in parameters])
+    orientations = np.array([p.orientation_deg for p in parameters])
 
     def robust_mean(values: NDArray[np.float64]) -> float:
         median = np.median(values)
@@ -136,24 +157,51 @@ def consolidate_lattice(parameters: Iterable[LatticeParameters], threshold: floa
             return float(np.mean(values[mask]))
         return float(median)
 
+    def robust_angle(values: NDArray[np.float64]) -> float:
+        if not len(values):
+            return 0.0
+        median = np.median(values)
+        wrapped = ((values - median + 180.0) % 360.0) - 180.0
+        mad = np.median(np.abs(wrapped)) + 1e-6
+        if np.any(np.abs(wrapped) <= threshold * mad):
+            mask = np.abs(wrapped) <= threshold * mad
+            selected = np.deg2rad(values[mask])
+        else:
+            selected = np.deg2rad(values)
+        sin_mean = np.mean(np.sin(selected))
+        cos_mean = np.mean(np.cos(selected))
+        angle = np.degrees(np.arctan2(sin_mean, cos_mean))
+        return float((angle + 360.0) % 360.0)
+
     return LatticeParameters(
         a_length=robust_mean(a_values),
         b_length=robust_mean(b_values),
         angle_deg=robust_mean(angles),
+        orientation_deg=robust_angle(orientations),
     )
 
 
-def lattice_vectors_in_pixels(params: LatticeParameters, pixel_size_nm: float) -> Tuple[np.ndarray, np.ndarray]:
+def lattice_vectors_in_pixels(
+    params: LatticeParameters, pixel_size_nm: float
+) -> Tuple[np.ndarray, np.ndarray]:
     """Return lattice basis vectors in pixel units."""
     a_len_pixels = params.a_length * 0.1 / pixel_size_nm
     b_len_pixels = params.b_length * 0.1 / pixel_size_nm
     angle_rad = np.deg2rad(params.angle_deg)
 
-    a_vec = np.array([a_len_pixels, 0.0], dtype=np.float32)
+    orientation_rad = np.deg2rad(params.orientation_deg)
+
+    a_vec = np.array(
+        [
+            a_len_pixels * np.cos(orientation_rad),
+            a_len_pixels * np.sin(orientation_rad),
+        ],
+        dtype=np.float32,
+    )
     b_vec = np.array(
         [
-            b_len_pixels * np.cos(angle_rad),
-            b_len_pixels * np.sin(angle_rad),
+            b_len_pixels * np.cos(orientation_rad + angle_rad),
+            b_len_pixels * np.sin(orientation_rad + angle_rad),
         ],
         dtype=np.float32,
     )

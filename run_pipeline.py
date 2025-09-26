@@ -20,7 +20,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--atom-diameter", type=float, default=1.5, help="Atom diameter for overlay (Å)")
     parser.add_argument("--drift", type=float, default=2.0, help="Drift allowance between frames (atoms)")
     parser.add_argument("--threshold", type=float, default=0.5, help="Brightness threshold for adsorbates")
-    parser.add_argument("--output", type=Path, default=Path("results"), help="Output directory")
     return parser.parse_args()
 
 
@@ -43,7 +42,11 @@ def main() -> None:
         drift_allowance_atoms=args.drift,
         brightness_threshold=args.threshold,
     )
-    run_pipeline(video, config, args.output)
+    result = run_pipeline(video, config)
+    print(f"True lattice: {result.lattice_json}")
+    print(f"Overlay video: {result.overlay_video_path}")
+    print(f"Diffusion summary: {result.diffusion_json}")
+    print(f"Frame diffusion CSV: {result.diffusion_csv}")
 
 
 if __name__ == "__main__":

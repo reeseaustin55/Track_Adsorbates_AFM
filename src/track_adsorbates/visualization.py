@@ -12,23 +12,23 @@ from .adsorbates import AdsorbateDetection
 
 
 def draw_lattice_overlay(
-    frame: NDArray[np.float32],
+    frame_shape: Tuple[int, int],
     detection: AdsorbateDetection,
     atom_diameter_pixels: float,
 ) -> NDArray[np.uint8]:
-    """Return an RGB image with an artificial lattice overlay."""
+    """Return an RGB image with an artificial lattice overlay on a blank canvas."""
 
-    base = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    height, width = frame_shape
+    base = np.zeros((height, width, 3), dtype=np.uint8)
     radius = max(int(round(atom_diameter_pixels / 2.0)), 1)
     for point, present in zip(detection.points, detection.present):
-        color = (220, 220, 220) if not present else (0, 255, 255)
+        color = (160, 160, 160) if not present else (0, 255, 255)
         cv2.circle(base, (int(round(point[0])), int(round(point[1]))), radius, color, -1)
     return base
 
 
-def combine_frames(original: NDArray[np.float32], overlay: NDArray[np.uint8]) -> NDArray[np.uint8]:
+def combine_frames(original_bgr: NDArray[np.uint8], overlay: NDArray[np.uint8]) -> NDArray[np.uint8]:
     """Create a side-by-side comparison frame."""
-    original_bgr = cv2.cvtColor(original.astype(np.uint8), cv2.COLOR_GRAY2BGR)
     return np.concatenate([original_bgr, overlay], axis=1)
 
 

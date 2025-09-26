@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
-from pathlib import Path
 from tkinter import filedialog, messagebox
 
 from .pipeline import PipelineConfig, run_pipeline
@@ -17,7 +16,6 @@ class App(tk.Tk):
         self.geometry("480x600")
         self.resizable(False, False)
         self.video_path_var = tk.StringVar()
-        self.output_dir_var = tk.StringVar(value=str(Path("results")))
         self.approx_a_var = tk.DoubleVar(value=3.0)
         self.approx_b_var = tk.DoubleVar(value=3.0)
         self.angle_var = tk.DoubleVar(value=60.0)
@@ -37,11 +35,7 @@ class App(tk.Tk):
         entry.grid(row=0, column=1, **padding)
         tk.Button(self, text="Browse", command=self._browse_video).grid(row=0, column=2, **padding)
 
-        tk.Label(self, text="Output directory").grid(row=1, column=0, **padding)
-        tk.Entry(self, textvariable=self.output_dir_var).grid(row=1, column=1, **padding)
-        tk.Button(self, text="Browse", command=self._browse_output).grid(row=1, column=2, **padding)
-
-        row = 2
+        row = 1
         for label, var in [
             ("Approx. a (Å)", self.approx_a_var),
             ("Approx. b (Å)", self.approx_b_var),
@@ -67,18 +61,11 @@ class App(tk.Tk):
         if path:
             self.video_path_var.set(path)
 
-    def _browse_output(self) -> None:
-        path = filedialog.askdirectory()
-        if path:
-            self.output_dir_var.set(path)
-
     def _run(self) -> None:
         path = self.video_path_var.get()
         if not path:
             messagebox.showerror("Error", "Please select a video file")
             return
-
-        output_dir = Path(self.output_dir_var.get()).expanduser().resolve()
 
         config = PipelineConfig(
             approx_a_angstrom=float(self.approx_a_var.get()),
@@ -91,19 +78,29 @@ class App(tk.Tk):
             brightness_threshold=float(self.threshold_var.get()),
         )
 
-        threading.Thread(target=self._run_pipeline, args=(path, config, output_dir), daemon=True).start()
+        threading.Thread(
+            target=self._run_pipeline,
+            args=(path, config),
+            daemon=True,
+        ).start()
 
-    def _run_pipeline(self, path: str, config: PipelineConfig, output_dir: Path) -> None:
+    def _run_pipeline(self, path: str, config: PipelineConfig) -> None:
         try:
             self.progress.set("Loading video...")
             video = load_video(path)
             self.progress.set("Processing frames...")
-            result = run_pipeline(video, config, output_dir)
+            result = run_pipeline(video, config)
             self.progress.set("Done")
             messagebox.showinfo(
                 "Complete",
-                f"Lattice saved to {result.overlay_video_path}\n"
-                f"Diffusion summary: {result.diffusion_json}",
+                "\n".join(
+                    [
+                        f"True lattice: {result.lattice_json}",
+                        f"Overlay video: {result.overlay_video_path}",
+                        f"Diffusion summary: {result.diffusion_json}",
+                        f"Frame diffusion CSV: {result.diffusion_csv}",
+                    ]
+                ),
             )
         except Exception as exc:  # pragma: no cover - GUI feedback
             self.progress.set("Error")
