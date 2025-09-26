@@ -2,15 +2,15 @@
 
 This project provides a GUI and command line interface for analysing atomic-resolution videos with adsorbates. The workflow performs:
 
-1. Frame-by-frame lattice estimation using FFT peak detection.
-2. Robust consolidation of lattice parameters across the video.
-3. Refined lattice fitting with configurable "wiggle" tolerance.
+1. Interactive FFT peak selection to seed the lattice basis.
+2. Frame-by-frame lattice estimation guided by the selected peaks.
+3. Robust consolidation of lattice parameters across the video with configurable "wiggle" tolerances.
 4. Adsorbate detection based on the intensity beneath lattice sites.
 5. Drift correction between frames and tracking of adsorbates.
 6. Diffusion coefficient computation from the resulting trajectories.
 7. Export of diffusion statistics alongside a side-by-side overlay video.
 
-> **Angle convention:** the `--angle` parameter (and its GUI counterpart) represents the angle *between* the two lattice vectors. The in-frame orientation of the lattice is determined automatically from the footage.
+> **Angle convention:** the interactive FFT selection determines both the lattice spacing and the angle *between* the lattice vectors. The in-frame orientation relative to the image axes is recovered automatically from the footage.
 
 ## Installation
 
@@ -26,21 +26,19 @@ pip install -r requirements.txt
 python -m src.track_adsorbates.gui
 ```
 
-Select an input video and adjust parameters to suit your dataset. The GUI automatically saves all artefacts in the same directory as the source video, so no output folder selection is required.
+Select an input video and adjust parameters to suit your dataset. After loading the first frame, a window appears showing the original image, the Difference-of-Gaussians (DoG) filtered view, and the log-magnitude FFT. Click two reciprocal lattice peaks on the FFT to initialise the lattice, optionally cycling through frames with the **Next →** button if the first frame is unsuitable. The GUI automatically saves all artefacts in the same directory as the source video, so no output folder selection is required.
 
 ## Command Line Usage
 
 Running `python run_pipeline.py` with no additional arguments launches the GUI directly.
 
-To process a video from the terminal instead, supply the required lattice parameters:
+To process a video from the terminal instead, provide the physical metadata and interactively choose the lattice peaks when prompted:
 
 ```bash
 python run_pipeline.py /path/to/video.mp4 \
-    --approx-a 3.0 \
-    --approx-b 3.0 \
-    --angle 90 \
     --frame-width 10 \
-    --wiggle 10 \
+    --first-wiggle 35 \
+    --second-wiggle 10 \
     --atom-diameter 1.5 \
     --drift 2.0
 ```

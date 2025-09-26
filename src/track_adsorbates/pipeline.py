@@ -31,11 +31,9 @@ from .visualization import combine_frames, draw_lattice_overlay, write_video
 
 @dataclass
 class PipelineConfig:
-    approx_a_angstrom: float
-    approx_b_angstrom: float
-    approx_angle_deg: float
     frame_width_nm: float
-    wiggle_percent: float = 10.0
+    first_pass_wiggle_percent: float = 35.0
+    second_pass_wiggle_percent: float = 10.0
     atom_diameter_angstrom: float = 1.5
     drift_allowance_atoms: float = 2.0
 
@@ -54,27 +52,36 @@ class PipelineResult:
 PHI_REFERENCE = np.array([0.5, 0.5], dtype=np.float32)
 
 
-def run_pipeline(video: VideoData, config: PipelineConfig) -> PipelineResult:
+def run_pipeline(
+    video: VideoData,
+    config: PipelineConfig,
+    initial_lattice: LatticeParameters,
+) -> PipelineResult:
     output_dir = video.path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    approx_lattice = LatticeParameters(
-        a_length=config.approx_a_angstrom,
-        b_length=config.approx_b_angstrom,
-        angle_deg=config.approx_angle_deg,
-        orientation_deg=0.0,
-    )
 
     width_pixels = video.frame_shape[1]
     pixel_size_nm = config.frame_width_nm / max(width_pixels, 1)
 
-    first_pass = _fit_frames(video.frames_gray, approx_lattice, pixel_size_nm, tolerance=0.35)
+    initial_tolerance = max(config.first_pass_wiggle_percent / 100.0, 0.02)
+    first_pass = _fit_frames(
+        video.frames_gray,
+        initial_lattice,
+        pixel_size_nm,
+        tolerance=initial_tolerance,
+    )
     true_lattice = consolidate_lattice(first_pass)
     lattice_path = output_dir / f"{video.path.stem}_true_lattice.json"
     export_lattice(lattice_path, true_lattice)
 
-    wiggle = max(config.wiggle_percent / 100.0, 0.02)
-    second_pass = _fit_frames(video.frames_gray, true_lattice, pixel_size_nm, tolerance=wiggle, search_steps=24)
+    refinement_tolerance = max(config.second_pass_wiggle_percent / 100.0, 0.01)
+    second_pass = _fit_frames(
+        video.frames_gray,
+        true_lattice,
+        pixel_size_nm,
+        tolerance=refinement_tolerance,
+        search_steps=24,
+    )
 
     a_vec_true, b_vec_true = lattice_vectors_in_pixels(true_lattice, pixel_size_nm)
     A_true = np.column_stack([a_vec_true, b_vec_true])

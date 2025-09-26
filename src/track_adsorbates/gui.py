@@ -6,7 +6,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from .pipeline import PipelineConfig, run_pipeline
-from .video import load_video
+from .video import load_video, VideoData
+from .selection import select_initial_lattice
+from .lattice import LatticeParameters
 
 
 class App(tk.Tk):
@@ -16,11 +18,9 @@ class App(tk.Tk):
         self.geometry("480x600")
         self.resizable(False, False)
         self.video_path_var = tk.StringVar()
-        self.approx_a_var = tk.DoubleVar(value=3.0)
-        self.approx_b_var = tk.DoubleVar(value=3.0)
-        self.angle_var = tk.DoubleVar(value=90.0)
         self.frame_width_var = tk.DoubleVar(value=10.0)
-        self.wiggle_var = tk.DoubleVar(value=10.0)
+        self.first_wiggle_var = tk.DoubleVar(value=35.0)
+        self.second_wiggle_var = tk.DoubleVar(value=10.0)
         self.atom_diameter_var = tk.DoubleVar(value=1.5)
         self.drift_allowance_var = tk.DoubleVar(value=2.0)
 
@@ -36,11 +36,9 @@ class App(tk.Tk):
 
         row = 1
         for label, var in [
-            ("Approx. a (Å)", self.approx_a_var),
-            ("Approx. b (Å)", self.approx_b_var),
-            ("Angle (deg)", self.angle_var),
             ("Frame width (nm)", self.frame_width_var),
-            ("Wiggle (%)", self.wiggle_var),
+            ("First pass wiggle (%)", self.first_wiggle_var),
+            ("Second pass wiggle (%)", self.second_wiggle_var),
             ("Atom diameter (Å)", self.atom_diameter_var),
             ("Drift allowance (atoms)", self.drift_allowance_var),
         ]:
@@ -65,28 +63,44 @@ class App(tk.Tk):
             messagebox.showerror("Error", "Please select a video file")
             return
 
+        try:
+            self.progress.set("Loading video...")
+            self.update_idletasks()
+            video = load_video(path)
+            self.progress.set("Select two FFT peaks")
+            self.update_idletasks()
+            initial_lattice = select_initial_lattice(
+                video,
+                frame_width_nm=float(self.frame_width_var.get()),
+            )
+        except Exception as exc:  # pragma: no cover - GUI feedback
+            self.progress.set("Error")
+            messagebox.showerror("Setup error", str(exc))
+            return
+
         config = PipelineConfig(
-            approx_a_angstrom=float(self.approx_a_var.get()),
-            approx_b_angstrom=float(self.approx_b_var.get()),
-            approx_angle_deg=float(self.angle_var.get()),
             frame_width_nm=float(self.frame_width_var.get()),
-            wiggle_percent=float(self.wiggle_var.get()),
+            first_pass_wiggle_percent=float(self.first_wiggle_var.get()),
+            second_pass_wiggle_percent=float(self.second_wiggle_var.get()),
             atom_diameter_angstrom=float(self.atom_diameter_var.get()),
             drift_allowance_atoms=float(self.drift_allowance_var.get()),
         )
 
         threading.Thread(
             target=self._run_pipeline,
-            args=(path, config),
+            args=(video, config, initial_lattice),
             daemon=True,
         ).start()
 
-    def _run_pipeline(self, path: str, config: PipelineConfig) -> None:
+    def _run_pipeline(
+        self,
+        video: VideoData,
+        config: PipelineConfig,
+        initial_lattice: LatticeParameters,
+    ) -> None:
         try:
-            self.progress.set("Loading video...")
-            video = load_video(path)
             self.progress.set("Processing frames...")
-            result = run_pipeline(video, config)
+            result = run_pipeline(video, config, initial_lattice)
             self.progress.set("Done")
             messagebox.showinfo(
                 "Complete",
