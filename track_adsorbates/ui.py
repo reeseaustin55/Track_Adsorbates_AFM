@@ -1,13 +1,18 @@
 """Simple Tkinter GUI for the adsorbate diffusion analysis pipeline."""
 from __future__ import annotations
 
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Dict
 
-from .analysis import analyze_adsorbate_diffusion
+if __package__ in (None, ""):
+    sys.path.append(str(Path(__file__).resolve().parent.parent))
+    from track_adsorbates.analysis import analyze_adsorbate_diffusion
+else:
+    from .analysis import analyze_adsorbate_diffusion
 
 
 class AnalysisGUI:
