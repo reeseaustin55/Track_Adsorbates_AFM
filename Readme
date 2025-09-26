@@ -1,1 +1,37 @@
-temp
+# Track Adsorbates AFM
+
+Python implementation of the AFM adsorbate tracking and diffusion analysis pipeline. The package includes:
+
+- `simple_lattice_occupancy`: locks the lattice, classifies adsorbate sites, and exports artificial-lattice videos.
+- `analyze_adsorbate_diffusion`: runs lattice locking and drift-corrected diffusion analysis, mirroring the MATLAB workflow.
+- `launch_gui`: a Tkinter GUI for selecting input data and configurable parameters.
+
+## Requirements
+
+- Python 3.12 (tested with Python 3.12.10)
+- Third-party packages: `numpy`, `scipy`, `imageio` (install `imageio-ffmpeg` for MP4 export support)
+
+## Usage
+
+```bash
+python -m track_adsorbates.ui
+```
+
+The GUI allows selecting a video file (or folder + filename) and entering lattice parameters. After analysis completes, diffusion statistics are displayed and saved to `<video>_diffusion_results.mat` alongside auxiliary exports.
+
+For scripted use:
+
+```python
+from track_adsorbates import analyze_adsorbate_diffusion
+
+results = analyze_adsorbate_diffusion(
+    "path/to/video.mp4",
+    vid_width_nm=10.0,
+    ax_a=3.0,
+    ay_a=3.0,
+    gamma_deg_guess=60.0,
+)
+print(results.D)
+```
+
+All outputs mirror the MATLAB originals, including artificial-lattice videos, per-frame occupancy data (`lattice_occupancy_locked.mat`), and diffusion statistics.
