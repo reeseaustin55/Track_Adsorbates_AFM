@@ -19,11 +19,9 @@ class AnalysisGUI:
     def __init__(self) -> None:
         self.root = tk.Tk()
         self.root.title("Adsorbate Diffusion Analysis")
-        self.root.geometry("480x420")
+        self.root.geometry("460x320")
         self.root.resizable(False, False)
 
-        self.video_folder_var = tk.StringVar()
-        self.video_name_var = tk.StringVar()
         self.video_file_var = tk.StringVar()
         self.width_nm_var = tk.StringVar(value="10.0")
         self.ax_var = tk.StringVar(value="3.0")
@@ -40,18 +38,10 @@ class AnalysisGUI:
         frame.pack(fill=tk.BOTH, expand=True)
 
         row = 0
-        tk.Label(frame, text="Video folder:").grid(row=row, column=0, sticky="w")
-        entry_folder = tk.Entry(frame, textvariable=self.video_folder_var, width=40)
-        entry_folder.grid(row=row, column=1, sticky="ew", padx=(6, 6))
-        tk.Button(frame, text="Browse", command=self._browse_folder).grid(row=row, column=2, sticky="ew")
-
-        row += 1
-        tk.Label(frame, text="Video file name:").grid(row=row, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self.video_name_var, width=40).grid(row=row, column=1, columnspan=2, sticky="ew", padx=(6, 6))
-
-        row += 1
-        tk.Label(frame, text="Or choose file directly:").grid(row=row, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self.video_file_var, width=40).grid(row=row, column=1, sticky="ew", padx=(6, 6))
+        tk.Label(frame, text="Video file:").grid(row=row, column=0, sticky="w")
+        tk.Entry(frame, textvariable=self.video_file_var, width=40).grid(
+            row=row, column=1, sticky="ew", padx=(6, 6)
+        )
         tk.Button(frame, text="Browse", command=self._browse_file).grid(row=row, column=2, sticky="ew")
 
         separators = [
@@ -76,17 +66,10 @@ class AnalysisGUI:
 
         frame.columnconfigure(1, weight=1)
 
-    def _browse_folder(self) -> None:
-        folder = filedialog.askdirectory(title="Select video folder")
-        if folder:
-            self.video_folder_var.set(folder)
-
     def _browse_file(self) -> None:
         file_path = filedialog.askopenfilename(title="Select AFM video", filetypes=[("Video files", "*.mp4 *.avi *.mov *.mkv"), ("All files", "*.*")])
         if file_path:
             self.video_file_var.set(file_path)
-            self.video_folder_var.set(str(Path(file_path).parent))
-            self.video_name_var.set(Path(file_path).name)
 
     def _run_analysis(self) -> None:
         try:
@@ -103,14 +86,9 @@ class AnalysisGUI:
 
     def _collect_parameters(self) -> Dict[str, object]:
         video_file = self.video_file_var.get().strip()
-        if video_file:
-            video_path = Path(video_file)
-        else:
-            folder = self.video_folder_var.get().strip()
-            name = self.video_name_var.get().strip()
-            if not folder or not name:
-                raise ValueError("Please provide a video file or folder and filename.")
-            video_path = Path(folder) / name
+        if not video_file:
+            raise ValueError("Please choose a video file to analyze.")
+        video_path = Path(video_file)
         if not video_path.exists():
             raise ValueError(f"Video file not found: {video_path}")
 
@@ -148,7 +126,8 @@ class AnalysisGUI:
             msg = (
                 f"D = {results.D:.4g} nm²/s\n"
                 f"Steps used: {results.N_steps}\n"
-                f"Δt = {results.delta_t:.4g} s"
+                f"Δt = {results.delta_t:.4g} s\n"
+                f"Saved to: {results.results_path}"
             )
             self.status_var.set("Analysis completed successfully.")
             messagebox.showinfo("Analysis complete", msg)

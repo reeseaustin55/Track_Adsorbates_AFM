@@ -32,6 +32,7 @@ class DiffusionResults:
     locked_basis_a1: np.ndarray
     locked_basis_a2: np.ndarray
     locked_params: Dict[str, float]
+    results_path: Path
 
     def to_dict(self) -> Dict[str, object]:
         data = asdict(self)
@@ -44,6 +45,7 @@ class DiffusionResults:
             "dm": self.step_order[:, 1],
             "count": self.step_hist_counts,
         }
+        data["results_path"] = str(data["results_path"])
         return data
 
 
@@ -69,7 +71,7 @@ def analyze_adsorbate_diffusion(
     )
 
     vid_path = Path(vid_path)
-    folder = vid_path.parent if vid_path.parent != Path("") else Path.cwd()
+    results_dir = bundle.results_dir
     base = vid_path.stem
 
     a1 = bundle.ax_star * np.array([np.cos(np.radians(bundle.theta_star)), np.sin(np.radians(bundle.theta_star))])
@@ -203,6 +205,8 @@ def analyze_adsorbate_diffusion(
         D_lo = float("nan")
         D_hi = float("nan")
 
+    out_path = results_dir / f"{base}_diffusion_results.mat"
+
     results = DiffusionResults(
         D=D,
         D_CI95=(D_lo, D_hi),
@@ -221,9 +225,9 @@ def analyze_adsorbate_diffusion(
             "gamma_deg": bundle.gamma_star,
             "theta_deg": bundle.theta_star,
         },
+        results_path=out_path,
     )
 
-    out_path = folder / f"{base}_diffusion_results.mat"
     savemat(out_path, {"results": results.to_dict()})
 
     return results

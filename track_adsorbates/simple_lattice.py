@@ -86,6 +86,7 @@ class BundleOutputs:
     canvas_width: int
     shift_canvas: Tuple[int, int]
     frame_shape: Tuple[int, int]
+    results_dir: Path
 
 
 def simple_lattice_occupancy(
@@ -108,6 +109,8 @@ def simple_lattice_occupancy(
     vid_path = Path(vid_path)
     folder = vid_path.parent if vid_path.parent != Path("") else Path.cwd()
     base = vid_path.stem
+    results_dir = folder / f"{base}_results"
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     reader = imageio.get_reader(str(vid_path))
     meta = reader.get_meta_data()
@@ -237,10 +240,10 @@ def simple_lattice_occupancy(
     canvas_height = max(1, max_yc - min_yc + 1)
     shift_canvas = (min_xc, min_yc)
 
-    sxspath = str(folder / f"{base}_artificial_lattice_SxS.mp4")
-    onlypath = str(folder / f"{base}_artificial_lattice_only.mp4")
-    side_writer = imageio.get_writer(sxspath, fps=fps)
-    only_writer = imageio.get_writer(onlypath, fps=fps)
+    sxspath = results_dir / f"{base}_artificial_lattice_SxS.mp4"
+    onlypath = results_dir / f"{base}_artificial_lattice_only.mp4"
+    side_writer = imageio.get_writer(str(sxspath), fps=fps)
+    only_writer = imageio.get_writer(str(onlypath), fps=fps)
 
     occ_frames: List[FrameBundle] = []
     prev_phi = np.array([0.5, 0.5])
@@ -352,7 +355,14 @@ def simple_lattice_occupancy(
         if xy_canvas.size:
             art = draw_spots(art, xy_canvas, r_spot_locked, params.gray_dark)
             if np.any(in_img) and np.any(occ_in == 1):
-                art = draw_spots(art, xy_canvas[in_img & (occ_in == 1)], r_spot_locked, params.gray_light)
+                highlight_mask = np.zeros(len(xy_canvas), dtype=bool)
+                highlight_mask[in_img] = occ_in == 1
+                art = draw_spots(
+                    art,
+                    xy_canvas[highlight_mask],
+                    r_spot_locked,
+                    params.gray_light,
+                )
         art = np.clip(art, 0, 1)
         art_rgb = np.repeat((art * 255).astype(np.uint8)[..., None], 3, axis=2)
 
@@ -391,8 +401,8 @@ def simple_lattice_occupancy(
     png_a = None
     png_p = None
     if params.export_fwhm_hists and fwhm_all_px:
-        png_a = str(folder / f"{base}_fwhm_hist_A.png")
-        png_p = str(folder / f"{base}_fwhm_hist_px.png")
+        png_a = str(results_dir / f"{base}_fwhm_hist_A.png")
+        png_p = str(results_dir / f"{base}_fwhm_hist_px.png")
         _save_histogram(np.array(fwhm_all_a), "FWHM (Å)", png_a, base)
         _save_histogram(np.array(fwhm_all_px), "FWHM (px)", png_p, base)
 
@@ -422,8 +432,8 @@ def simple_lattice_occupancy(
         "ay_px_guess": ay_px_guess,
         "nm_per_px": nm_per_px,
         "occFrames": np.array(occ_serialised, dtype=object),
-        "sxspath": sxspath,
-        "onlypath": onlypath,
+        "sxspath": str(sxspath),
+        "onlypath": str(onlypath),
         "ax_star": ax_star,
         "ay_star": ay_star,
         "gamma_star": gamma_star,
@@ -436,8 +446,9 @@ def simple_lattice_occupancy(
         "Wc": canvas_width,
         "shiftCanvas": np.array(shift_canvas),
         "frame_shape": np.array([height, width]),
+        "results_dir": str(results_dir),
     }
-    savemat(folder / "lattice_occupancy_locked.mat", data)
+    savemat(results_dir / "lattice_occupancy_locked.mat", data)
 
     return BundleOutputs(
         occ_frames=occ_frames,
@@ -448,8 +459,8 @@ def simple_lattice_occupancy(
         gamma_star=gamma_star,
         theta_star=theta_star,
         nm_per_px=nm_per_px,
-        sxspath=sxspath,
-        onlypath=onlypath,
+        sxspath=str(sxspath),
+        onlypath=str(onlypath),
         fwhm_all_px=np.array(fwhm_all_px),
         fwhm_all_a=np.array(fwhm_all_a),
         png_a=png_a,
@@ -458,6 +469,7 @@ def simple_lattice_occupancy(
         canvas_width=canvas_width,
         shift_canvas=shift_canvas,
         frame_shape=(height, width),
+        results_dir=results_dir,
     )
 
 
