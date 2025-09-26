@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from src.track_adsorbates.pipeline import PipelineConfig, run_pipeline
@@ -24,6 +25,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    if len(sys.argv) == 1:
+        from src.track_adsorbates.gui import launch_app
+
+        launch_app()
+        return
+
     args = parse_args()
     video = load_video(str(args.video))
     config = PipelineConfig(

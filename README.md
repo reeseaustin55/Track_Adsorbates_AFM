@@ -28,6 +28,10 @@ Select an input video and adjust parameters to suit your dataset. Outputs are sa
 
 ## Command Line Usage
 
+Running `python run_pipeline.py` with no additional arguments launches the GUI directly.
+
+To process a video from the terminal instead, supply the required lattice parameters:
+
 ```bash
 python run_pipeline.py /path/to/video.mp4 \
     --approx-a 3.0 \
