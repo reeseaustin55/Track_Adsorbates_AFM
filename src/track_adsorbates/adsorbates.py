@@ -1,0 +1,207 @@
+"""Adsorbate detection and diffusion analysis."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Tuple
+
+import numpy as np
+from numpy.typing import NDArray
+from scipy.optimize import linear_sum_assignment
+
+
+@dataclass
+class AdsorbateDetection:
+    points: NDArray[np.float32]
+    present: NDArray[np.bool_]
+
+    def to_dict(self) -> Dict[str, NDArray]:
+        return {"points": self.points, "present": self.present}
+
+
+@dataclass
+class Track:
+    id: int
+    positions: List[Tuple[float, float]]
+    frames: List[int]
+
+    def add(self, frame_index: int, position: Tuple[float, float]) -> None:
+        self.frames.append(frame_index)
+        self.positions.append(position)
+
+    def displacement_vectors(self) -> List[np.ndarray]:
+        vectors: List[np.ndarray] = []
+        for i in range(1, len(self.positions)):
+            prev = np.array(self.positions[i - 1])
+            curr = np.array(self.positions[i])
+            vectors.append(curr - prev)
+        return vectors
+
+
+@dataclass
+class DiffusionResults:
+    frame_values: NDArray[np.float64]
+    average: float
+    slope: float
+
+
+def detect_adsorbates(
+    frame: NDArray[np.float32],
+    lattice_points: NDArray[np.float32],
+    atom_diameter_pixels: float,
+    brightness_threshold: float = 0.5,
+) -> AdsorbateDetection:
+    """Detect adsorbates by sampling intensity around lattice points."""
+
+    height, width = frame.shape
+    radius = max(atom_diameter_pixels / 2.0, 1.0)
+    y_coords = np.clip(lattice_points[:, 1], 0, height - 1)
+    x_coords = np.clip(lattice_points[:, 0], 0, width - 1)
+
+    samples = nd_gaussian_sample(frame, x_coords, y_coords, radius)
+    norm_samples = (samples - samples.min()) / (samples.max() - samples.min() + 1e-6)
+    present = norm_samples > brightness_threshold
+    return AdsorbateDetection(points=lattice_points, present=present)
+
+
+def nd_gaussian_sample(
+    frame: NDArray[np.float32],
+    x_coords: NDArray[np.float32],
+    y_coords: NDArray[np.float32],
+    radius: float,
+) -> NDArray[np.float32]:
+    """Sample frame intensities using a Gaussian weighting around given coordinates."""
+    sigma = radius / 2.0
+    size = int(max(radius * 4, 3))
+    grid = np.arange(-size, size + 1)
+    gx, gy = np.meshgrid(grid, grid)
+    kernel = np.exp(-(gx**2 + gy**2) / (2 * sigma**2))
+    kernel /= np.sum(kernel)
+    samples = []
+    for x, y in zip(x_coords, y_coords):
+        x0 = int(round(x))
+        y0 = int(round(y))
+        x_min = max(x0 - size, 0)
+        x_max = min(x0 + size + 1, frame.shape[1])
+        y_min = max(y0 - size, 0)
+        y_max = min(y0 + size + 1, frame.shape[0])
+        region = frame[y_min:y_max, x_min:x_max]
+        k = kernel[
+            (y_min - (y0 - size)) : (y_max - (y0 - size)),
+            (x_min - (x0 - size)) : (x_max - (x0 - size)),
+        ]
+        weighted = np.sum(region * k)
+        samples.append(weighted)
+    return np.array(samples, dtype=np.float32)
+
+
+def assign_tracks(
+    detections: List[AdsorbateDetection],
+    max_distance: float,
+) -> List[Track]:
+    """Link adsorbate detections across frames using nearest-neighbour assignment."""
+
+    tracks: List[Track] = []
+    active_tracks: Dict[int, Track] = {}
+    next_id = 0
+
+    for frame_idx, detection in enumerate(detections):
+        present_points = detection.points[detection.present]
+        if not len(present_points):
+            # No detections; deactivate all active tracks
+            active_tracks.clear()
+            continue
+
+        if not active_tracks:
+            for point in present_points:
+                track = Track(id=next_id, positions=[tuple(point)], frames=[frame_idx])
+                tracks.append(track)
+                active_tracks[next_id] = track
+                next_id += 1
+            continue
+
+        track_ids = list(active_tracks.keys())
+        prev_points = np.array([active_tracks[tid].positions[-1] for tid in track_ids])
+        cost = np.linalg.norm(prev_points[:, None, :] - present_points[None, :, :], axis=2)
+        row_ind, col_ind = linear_sum_assignment(cost)
+
+        assigned_tracks = set()
+        assigned_points = set()
+        for r, c in zip(row_ind, col_ind):
+            if cost[r, c] <= max_distance:
+                track_id = track_ids[r]
+                position = tuple(present_points[c])
+                active_tracks[track_id].add(frame_idx, position)
+                assigned_tracks.add(track_id)
+                assigned_points.add(c)
+
+        # Unassigned tracks are dropped
+        for track_id in list(active_tracks.keys()):
+            if track_id not in assigned_tracks:
+                del active_tracks[track_id]
+
+        # Start new tracks for unassigned points
+        for idx, point in enumerate(present_points):
+            if idx not in assigned_points:
+                track = Track(id=next_id, positions=[tuple(point)], frames=[frame_idx])
+                tracks.append(track)
+                active_tracks[next_id] = track
+                next_id += 1
+
+    return tracks
+
+
+def compute_diffusion(
+    tracks: Iterable[Track],
+    pixel_size_nm: float,
+    fps: float,
+) -> DiffusionResults:
+    """Compute diffusion coefficient statistics from tracks."""
+
+    displacements: List[float] = []
+    frame_values: List[float] = []
+    dt = 1.0 / max(fps, 1e-6)
+
+    for track in tracks:
+        positions = [np.array(p) for p in track.positions]
+        for i in range(1, len(positions)):
+            disp = positions[i] - positions[i - 1]
+            disp_nm = np.linalg.norm(disp) * pixel_size_nm
+            displacements.append(disp_nm)
+            D = (disp_nm**2) / (4.0 * dt)
+            frame_values.append(D)
+
+    if not displacements:
+        return DiffusionResults(
+            frame_values=np.zeros(0, dtype=np.float64),
+            average=0.0,
+            slope=0.0,
+        )
+
+    frame_values_array = np.array(frame_values, dtype=np.float64)
+    average = float(np.mean(frame_values_array))
+
+    # Build MSD curve
+    max_lag = max(len(track.positions) for track in tracks)
+    msd = []
+    times = []
+    for lag in range(1, max_lag):
+        lag_sq = []
+        for track in tracks:
+            positions = [np.array(p) for p in track.positions]
+            for i in range(lag, len(positions)):
+                disp = positions[i] - positions[i - lag]
+                lag_sq.append((np.linalg.norm(disp) * pixel_size_nm) ** 2)
+        if lag_sq:
+            msd.append(np.mean(lag_sq))
+            times.append(lag * dt)
+    if len(msd) >= 2:
+        slope, _ = np.polyfit(times, msd, 1)
+        diffusion = slope / 4.0
+    else:
+        diffusion = average
+        slope = 4.0 * diffusion
+    return DiffusionResults(
+        frame_values=frame_values_array,
+        average=diffusion,
+        slope=slope,
+    )
