@@ -13,6 +13,10 @@ from .lattice import LatticeParameters, enhance_frame
 from .video import VideoData
 
 
+class SelectionCancelledError(RuntimeError):
+    """Raised when the user closes the picker without confirming a selection."""
+
+
 @dataclass
 class _SelectionState:
     frame_index: int
@@ -157,7 +161,7 @@ def select_initial_lattice(video: VideoData, frame_width_nm: float) -> LatticePa
     plt.show()
 
     if "params" not in result:
-        raise RuntimeError("Initial lattice selection was cancelled")
+        raise SelectionCancelledError("Initial lattice selection was cancelled")
     return result["params"]
 
 

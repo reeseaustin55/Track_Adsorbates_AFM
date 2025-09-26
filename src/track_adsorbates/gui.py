@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox
 
 from .pipeline import PipelineConfig, run_pipeline
 from .video import load_video, VideoData
-from .selection import select_initial_lattice
+from .selection import SelectionCancelledError, select_initial_lattice
 from .lattice import LatticeParameters
 
 
@@ -73,6 +73,10 @@ class App(tk.Tk):
                 video,
                 frame_width_nm=float(self.frame_width_var.get()),
             )
+        except SelectionCancelledError:
+            self.progress.set("Cancelled")
+            messagebox.showinfo("Cancelled", "Lattice selection was cancelled.")
+            return
         except Exception as exc:  # pragma: no cover - GUI feedback
             self.progress.set("Error")
             messagebox.showerror("Setup error", str(exc))

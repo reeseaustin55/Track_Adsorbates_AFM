@@ -7,7 +7,10 @@ from pathlib import Path
 
 from src.track_adsorbates.pipeline import PipelineConfig, run_pipeline
 from src.track_adsorbates.video import load_video
-from src.track_adsorbates.selection import select_initial_lattice
+from src.track_adsorbates.selection import (
+    SelectionCancelledError,
+    select_initial_lattice,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,7 +50,11 @@ def main() -> None:
         atom_diameter_angstrom=args.atom_diameter,
         drift_allowance_atoms=args.drift,
     )
-    initial_lattice = select_initial_lattice(video, frame_width_nm=args.frame_width)
+    try:
+        initial_lattice = select_initial_lattice(video, frame_width_nm=args.frame_width)
+    except SelectionCancelledError:
+        print("Initial lattice selection was cancelled; exiting without processing.")
+        return
     result = run_pipeline(video, config, initial_lattice)
     print(f"True lattice: {result.lattice_json}")
     print(f"Overlay video: {result.overlay_video_path}")
