@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
 
 
@@ -114,28 +115,42 @@ def nd_gaussian_sample(
     radius: float,
 ) -> NDArray[np.float32]:
     """Sample frame intensities using a Gaussian weighting around given coordinates."""
-    sigma = radius / 2.0
-    size = int(max(radius * 4, 3))
-    grid = np.arange(-size, size + 1)
-    gx, gy = np.meshgrid(grid, grid)
-    kernel = np.exp(-(gx**2 + gy**2) / (2 * sigma**2))
-    kernel /= np.sum(kernel)
-    samples = []
-    for x, y in zip(x_coords, y_coords):
-        x0 = int(round(x))
-        y0 = int(round(y))
-        x_min = max(x0 - size, 0)
-        x_max = min(x0 + size + 1, frame.shape[1])
-        y_min = max(y0 - size, 0)
-        y_max = min(y0 + size + 1, frame.shape[0])
-        region = frame[y_min:y_max, x_min:x_max]
-        k = kernel[
-            (y_min - (y0 - size)) : (y_max - (y0 - size)),
-            (x_min - (x0 - size)) : (x_max - (x0 - size)),
-        ]
-        weighted = np.sum(region * k)
-        samples.append(weighted)
-    return np.array(samples, dtype=np.float32)
+
+    if x_coords.size == 0:
+        return np.zeros(0, dtype=np.float32)
+
+    sigma = max(radius / 2.0, 0.5)
+    smoothed = ndimage.gaussian_filter(frame, sigma=sigma, mode="reflect")
+    return _bilinear_sample(smoothed, x_coords, y_coords)
+
+
+def _bilinear_sample(
+    frame: NDArray[np.float32],
+    x_coords: NDArray[np.float32],
+    y_coords: NDArray[np.float32],
+) -> NDArray[np.float32]:
+    """Bilinear interpolation for arbitrary sampling points."""
+
+    height, width = frame.shape
+    x0 = np.floor(x_coords).astype(int)
+    y0 = np.floor(y_coords).astype(int)
+    x1 = np.clip(x0 + 1, 0, width - 1)
+    y1 = np.clip(y0 + 1, 0, height - 1)
+
+    x0 = np.clip(x0, 0, width - 1)
+    y0 = np.clip(y0, 0, height - 1)
+
+    fx = x_coords - x0
+    fy = y_coords - y0
+
+    top_left = frame[y0, x0]
+    top_right = frame[y0, x1]
+    bottom_left = frame[y1, x0]
+    bottom_right = frame[y1, x1]
+
+    top = top_left * (1 - fx) + top_right * fx
+    bottom = bottom_left * (1 - fx) + bottom_right * fx
+    return (top * (1 - fy) + bottom * fy).astype(np.float32)
 
 
 def assign_tracks(
