@@ -1,1 +1,42 @@
-temp
+# Bibliography PDF Fetcher
+
+This repository provides a small command-line script for downloading the PDF
+files referenced in a paper's bibliography. It works by extracting DOIs from
+a block of citation text (or by querying Crossref when a DOI is missing) and
+fetching any available PDF using the DOI link.
+
+## Requirements
+
+* Python 3.9 or later
+* The [`requests`](https://pypi.org/project/requests/) package
+
+Install the dependency with:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+Save the bibliography into a text file (for example `references.txt`) or pipe
+it into the script via standard input:
+
+```bash
+python fetch_bibliography_pdfs.py --input references.txt --outdir pdfs --email your.name@example.edu
+```
+
+The script will create the specified output directory (default: `downloads`)
+and store any successfully downloaded PDFs inside it. Supplying an email
+address is recommended so that DOI lookups through Crossref are routed through
+the polite API pool.
+
+If your bibliography entries already contain DOIs and you want to skip Crossref
+queries, pass the `--no-lookup` flag:
+
+```bash
+python fetch_bibliography_pdfs.py --no-lookup < references.txt
+```
+
+At the end of the run, a short summary highlights which references were
+successfully downloaded and which ones failed (for example because a PDF was
+not directly accessible via DOI).
